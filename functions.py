@@ -1,38 +1,41 @@
+import concurrent.futures
 import gc
+import json
+import logging
+import math
 import os
 import re
 import time
-from typing import Optional, Iterable
+from typing import Optional
 
+import PyPDF2 as PyPDF2
 import pandas as pd
 import torch
-from langchain.document_loaders import PyPDFDirectoryLoader, DirectoryLoader, PyPDFLoader, UnstructuredPDFLoader, \
-    TextLoader
-from langchain.embeddings import SentenceTransformerEmbeddings
-from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from pypdf import PdfFileReader
 from sentence_transformers import SentenceTransformer
-
+from tqdm import tqdm
 from PineconeDB import pinecone_upload
 from QdrantDB import qdrant_upload
 
+logging.basicConfig(level=logging.DEBUG)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+embeddings = SentenceTransformer(model_name_or_path="sentence-transformers/all-mpnet-base-v2", device='cpu')
+#print('f')
+
 
 def get_file_metadata(filename: str) -> Optional[dict]:
+    # Scan metadata.csv for associated data
     df = pd.read_csv("metadata.csv")
-    filename = filename.replace(".pdf", "").replace("test", "").replace('\\', "")
+    filename = filename.replace(".pdf", "").replace("data", "").replace('\\', "")
     located = df.loc[df['digest'] == filename]
     if located.empty:
-        return None
-    metadata = {
+        logging.error(f"Could not find {filename} in metadata.csv")
+        return {}
+    return {
         'file_name': filename,
-        'size': str(located['file_size'].iloc[0]),  # Has to be str or int for some reason, was not working
+        'size': str(located['file_size'].iloc[0]),
+        # Has to be str or int for some reason, was not working before. # Size is in bytes
         'created_at': located['date'].iloc[0][:10]
     }
-    return metadata
-
-
-# embeddings = SentenceTransformerEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2", model_kwargs={"device": device})
 
 
 # Recursive method to reduce junk \n and whitespace characters. Reduces all spaces to just one.
@@ -43,97 +46,175 @@ def clean_text(text):
         return clean_text(fixed)
     else:
         # Remove line skipping associated with PDF loading
-        fixed = fixed.replace("\n", "").replace(".,", ".")
+        fixed = fixed.replace("\n", "").replace(".,", ".").replace("\t", "")
 
-        # Remove unknown chars related to PDF loading
+        # Remove hypens between two words where it should not exist due to PDF loading
         fixed = re.sub(r'\b(\w+)-(\w+)\b', r'\1\2', fixed)
+
+        # Forgot what this one removes
         fixed = re.sub(r'\(cid:\d+\)', ' ', fixed)
         if "  " in fixed:
             return clean_text(fixed)
 
-        # Remove whitespace if text starts with it
+        # Remove starting whitespace
         if fixed.startswith(" "):
             fixed = fixed[1:]
         return fixed
 
 
-# Loads pdfs from directory and splits them into nodes
-def load_pdfs():
+def process_pdf(filename):
+    text = ""
+    directory_path = os.getcwd() + "/data/"
+    file_path = directory_path + filename
+
+    try:
+        with open(file_path, "rb") as pdf_file:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+
+            # Extract metadata
+            metadata = get_file_metadata(filename)
+
+            # Extract text from each page
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                text += page.extract_text()
+
+            text = clean_text(text)
+
+            # Cut down text from PDF into reasonable chunks
+
+            max_chunk_size = 1000  # Maximum chunk size
+            overlap = 20  # Allowed overlap between chunks
+            chunks = []
+            start_idx = 0
+
+            #print("K1")
+            while start_idx < len(text):
+                end_idx = start_idx + max_chunk_size
+                try:
+                    if end_idx >= len(text):
+                        # #print("F4")
+                        #print("K2")
+                        vectors = embeddings.encode(text[start_idx:], show_progress_bar=False)
+                        #print("K2.5")
+                    else:
+                        #print("K3")
+                        vectors = embeddings.encode(text[start_idx:end_idx], show_progress_bar=False)
+                except Exception as e:
+                    logging.warning(f"An error occured while embedding. File {filename} and end {end_idx}: {e}")
+                    continue
+                except:
+                    print("something went wrong")
+                #print("K4")
+                chunks.append({
+                    'id': filename,
+                    'metadata': {
+                        'file_name': filename,
+                        'size': str(metadata['size']),  # Has to be str or int for some reason, was not working
+                        'created_at': metadata['created_at'],
+                        'text': text[start_idx:]
+                    },
+                    'values': vectors
+                })
+                start_idx = end_idx - overlap
+                # #print("F5")
+            return chunks
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        return []
+
+
+def encode_docs(source=None, batch_size=50, max_num=0):
+    #print("5")
     starting_time = time.time()
-    print("Loading PDFS...")
-    loader = DirectoryLoader(
-        path="./test/",
-        loader_cls=UnstructuredPDFLoader,
-        show_progress=True,
-        use_multithreading=True
-    ).load()
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=20
-    )
-
-    docs = text_splitter.split_documents(loader)
-    for doc in docs:
-        doc.page_content = clean_text(doc.page_content)
-        doc.metadata = get_file_metadata(doc.metadata['source'])
-    # print(docs)
-
-    print(f"Parsing PDF's took {time.time() - starting_time}s total")
-    return docs
-
-
-def encode_docs(vectordb='Pinecone', batch_size=50, max_num=0):
+    # Get current path
     directory_path = os.getcwd() + "/data/"
     directory = os.listdir(directory_path)
 
     dir_length = len(directory)
     if max_num != 0:
         dir_length = max_num
+
     loops = 0
+    #print("6")
+    pbar = tqdm(total=math.ceil(dir_length / batch_size), position=1, desc=f"Loading chunks of {batch_size}")
+    #print('7')
+    logging.debug(f"Encoding documents...")
+    #print('8')
+    all_docs = []
+
+    # While loop which will loop through the directory in batches of batch_size
     while dir_length > loops * batch_size:
         loops += 1
 
         limit = batch_size * loops
-        lang_documents: List[Document] = []
+        batched = []
         if limit > dir_length:
             limit = dir_length
 
-        for i in range((loops - 1) * batch_size, limit):
-            filename = directory[i]
-            if filename.endswith(".pdf") is not True:
-                continue
+        # Returns the files only in the current batch
+        batched_files = directory[(loops - 1) * batch_size:limit]
 
-            print(filename)
-            try:
-                loaded_pdf = UnstructuredPDFLoader(file_path=f"./data/{filename}").load()
-            except:
-                continue
-            # print(loaded_pdf)
-            loaded_pdf[0].metadata = get_file_metadata(filename)
-            lang_documents.extend(loaded_pdf)
+        #print("F1")
+        # Multi-threading processing of PDFs
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4)) as executor:
+            futures = [executor.submit(process_pdf, filename) for filename in batched_files]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                #print("F2")
+                batched.extend(result)
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=20
-        )
-        docs = text_splitter.split_documents(lang_documents)
+        # Upload to VectorDB based off of preference
+        source_time = time.time()
+        logging.debug(f"Uploading batch {loops} to {source}...")
+        if source == 'Pinecone':
+            pinecone_upload(batched)
+        elif source == 'Qdrant':
+            qdrant_upload(batched)
+        elif source == 'JSON':
+            convertJSON(batch=batched)
+        elif source == None:
+            all_docs.append(batched)
+        logging.info(f"Uploaded batch {loops} to {source} in {time.time() - source_time} seconds")
 
-        # Simplify process before querying
-        final_docs = []
-        for data in docs:
-            doc = {
-                'text': clean_text(data.page_content),
-                'metadata': data.metadata,
-            }
-            final_docs.append(doc)
+        # Clear memory
+        batched = None
+        gc.collect()
+        pbar.update(1)
 
-        if vectordb == 'Pinecone':
-            pinecone_upload(final_docs)
-        elif vectordb == 'Qdrant':
-            qdrant_upload(final_docs)
+    logging.debug(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
+    pbar.close()
+    if source is None:
+        return all_docs
 
-    # Garbage Collection
-    gc.collect()
 
-encode_docs()
+def convertJSON(filename="\\bigdata.json", batch=None):
+    if batch is None:
+        batch = []
+    directory_path = os.getcwd() + filename
+
+    for doc in batch:
+        doc['values'] = doc['values'].tolist()
+    with open(directory_path, "w") as file:
+        # json.dump(batch, file)
+        data = json.load(file)
+        #print(data)
+
+
+def fromJSON(filename="\\bigdata.json", limit=None):
+    directory_path = os.getcwd() + filename
+    with open(directory_path, "w") as file:
+        data = json.load(file)
+    if limit is not None:
+        data = data[:limit]
+    #print(data)
+    return data
+
+
+#print("WOAH")
+encode_docs(
+    source="Pinecone",
+    batch_size=50)
+
+# fromJSON()

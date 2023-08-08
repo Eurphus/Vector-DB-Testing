@@ -3,6 +3,7 @@ import time
 
 import openai
 from dotenv import find_dotenv, load_dotenv
+from numpy.array_api._array_object import Array
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Distance, VectorParams
 from langchain.vectorstores import Qdrant
@@ -32,17 +33,6 @@ def create_QdrantDB():
     except:
         print("Existing DB Found...")
 
-    starting_time = time.time()
-    # qdrant = Qdrant.from_documents(
-    #     load_pdfs(),
-    #     embeddings,
-    #     url=os.environ["QDRANT_URL"],
-    #     api_key=os.environ["QDRANT_API_KEY"],
-    #     prefer_grpc=True,
-    #     collection_name=index_name
-    # )
-    print(f"Embedding PDFS took {time.time() - starting_time}s total")
-
 def search_qdrant(query, k=5):
     results = client.search(
         collection_name=index_name,
@@ -52,4 +42,13 @@ def search_qdrant(query, k=5):
     return results
 
 def qdrant_upload(docs):
-    print(docs[0])
+    vectors = [Array]
+    payload = []
+    for doc in docs:
+        vectors.append(doc['values'])
+        payload.append(doc['metadata'])
+    print(vectors[1])
+    print(payload[1])
+    client.upload_collection(
+
+    )

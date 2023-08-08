@@ -45,16 +45,11 @@ def search_pinecone(query, k=5):
 
 def pinecone_upload(docs):
     create_pineconedb()
-    for doc in docs:
-        doc['values'] = embeddings.encode(doc['text'])
-        doc['id'] = doc['metadata']['file_name']
-        doc['metadata']['text'] = doc['text']
-        del doc['text']
 
     with pinecone.Index(index_name, pool_threads=30) as index:
         index.upsert(
             vectors=docs,
-            async_req=True
+            namespace="PDF_Testing",
+            async_req=True,
+            show_progress=False
         )
-
-    return
