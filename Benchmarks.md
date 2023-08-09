@@ -1,11 +1,14 @@
-Specs:
+# Specs
 - **CPU:** 5600X w/PBO (Up to 4.6Mhz)
 - **GPU:** RTX 3090 w/ Cuda 11.8
 - **Ram:** 16GB 3000Mhz CL16 ram
 - **Storage:** M.2 NVME SSD, unsure of IO speeds but it would not be limiting in this benchmark
-Thermal throttling did not happen in any of these benchmarks. Temperatures were always within reasonable ranges.
 
-# Pre-processing Benchmarks
+Thermal throttling did not happen in any of these benchmarks.Temperatures were always within reasonable ranges.
+
+All tests were done on the same machine with the same software and monitoring tools.
+
+## Pre-processing Benchmarks V1
 [Code Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/0b88a65250776860a0efa5c4af21b6e9624759c4)
 
 Using concurrent threadpoolexecutor. Loading 100 various PDF files with different formats and lengths of text.
