@@ -3,12 +3,7 @@ import os
 import time
 
 import pinecone
-import torch
 from dotenv import load_dotenv, find_dotenv
-from sentence_transformers import SentenceTransformer
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-embeddings = SentenceTransformer(model_name_or_path="sentence-transformers/all-mpnet-base-v2", device=device)
 
 _ = load_dotenv(find_dotenv())
 
@@ -38,16 +33,17 @@ def create_pineconedb():
     #     embeddings,
     #     index_name=index_name
     # )
-    #print(f"Embedding PDFS took {time.time() - starting_time}s total")
+    # print(f"Embedding PDFS took {time.time() - starting_time}s total")
 
 
-def search_pinecone(query, k=5):
-    index = pinecone.Index(index_name=index_name)
-    return index.query(embeddings.embed_query(query), top_k=k, include_metadata=True)
+# def search_pinecone(query, k=5):
+#     index = pinecone.Index(index_name=index_name)
+#     return index.query(embeddings.embed_query(query), top_k=k, include_metadata=True)
 
-def pinecone_upload(docs):
+
+async def pinecone_upload(docs):
     create_pineconedb()
-    with pinecone.Index(index_name, pool_threads=30) as index:
+    async with pinecone.Index(index_name, pool_threads=30) as index:
         index.upsert(
             vectors=docs,
             namespace="PDF_Testing",

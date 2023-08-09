@@ -5,8 +5,6 @@ import openai
 from dotenv import find_dotenv, load_dotenv
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Distance, VectorParams
-from langchain.vectorstores import Qdrant
-
 
 _ = load_dotenv(find_dotenv())
 

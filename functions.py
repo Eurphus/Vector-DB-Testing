@@ -1,3 +1,4 @@
+import asyncio
 import concurrent.futures
 import datetime
 import gc
@@ -16,18 +17,18 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 from PineconeDB import pinecone_upload
-from QdrantDB import qdrant_upload
 # Current Run config
 current_source = "JSON"
 batch_size = 20
 max_num = 100
-device_override = 'cuda'
+device_override = 'cpu'
 
 # List of configurable options
 model_name = "all-mpnet-base-v2"
 data_directory = "data"
 metadata_file = "metadata.csv"
 JSON_file = "bigdata.json"
+max_workers_num = min(32, (os.cpu_count() or 1))
 max_chunk_size = 800  # Maximum chunk size
 overlap = 20  # Allowed overlap between chunks
 logging_folder = os.getcwd() + "/logs/"
@@ -43,10 +44,17 @@ if device_override is None:
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 else:
     device = device_override
-logging.info(f"Using device {device} for embedding ")
-
-# print('f')
-
+logging.info(f"Using device {device} for embedding "
+             f"Using {max_workers_num} workers"
+             f"Using batches of {batch_size} with a max of {max_num} files"
+             f"Model Name={model_name}, data directory={data_directory}, max chunk size={max_chunk_size}, overlap={overlap}")
+# Define a embedding model for each worker to prevent re-defining them constantly
+# Can't use a single one with using CUDA or else issues arise
+# embeddings = SentenceTransformer(model_name_or_path=model_name, device=device)#[]
+# encoder = embeddings
+embeddings = []
+for i in range(max_workers_num):
+    embeddings.append(SentenceTransformer(model_name_or_path=model_name, device=device))
 
 def get_file_metadata(filename: str) -> Optional[dict]:
     # Scan metadata.csv for associated data
@@ -88,7 +96,10 @@ def clean_text(text):
         return fixed
 
 
-def process_pdf(filename):
+def process_pdf(filename, encoder):
+    encoder = encoder%max_workers_num
+    logging.info(f"Using encoder #{encoder}")
+    encoder = embeddings[encoder]
     text = ""
     directory_path = os.getcwd() + f"/{data_directory}/"
     file_path = directory_path + filename
@@ -114,10 +125,6 @@ def process_pdf(filename):
             chunks = []
             start_idx = 0
 
-            # When using multi-threading w/CUDA, it must be defined per thread or else CUDA issues arise. This is not very optimized right now
-            #embeddings = SentenceTransformer(model_name_or_path=model_name, device=device)
-
-            embeddings = SentenceTransformer(model_name_or_path=model_name, device=device)
             while start_idx < len(text):
                 end_idx = start_idx + max_chunk_size
                 if end_idx >= len(text):
@@ -125,7 +132,7 @@ def process_pdf(filename):
                 else:
                     tmp = text[start_idx:end_idx]
                 try:
-                    vectors = embeddings.encode(tmp, show_progress_bar=False).tolist()
+                    vectors = encoder.encode(tmp, show_progress_bar=False).tolist()
                 except Exception as e:
                     logging.warning(f"An error occured while embedding. File {filename} and end {end_idx}: {e}")
                     continue
@@ -141,7 +148,6 @@ def process_pdf(filename):
                     'values': vectors
                 })
                 start_idx = end_idx - overlap
-                # #print("F5")
             return chunks
     except Exception as e:
         logging.error(f"An error occurred: {e}")
@@ -149,7 +155,6 @@ def process_pdf(filename):
 
 
 def encode_docs(source=None, batch_size=50, max_num=0):
-    # print("5")
     starting_time = time.time()
 
     # Get current path
@@ -162,11 +167,8 @@ def encode_docs(source=None, batch_size=50, max_num=0):
         dir_length=max_num
 
     loops = 0
-    # print("6")
     pbar = tqdm(total=math.ceil(dir_length / batch_size), position=1, desc=f"Loading chunks of {batch_size}")
-    # print('7')
     logging.info(f"Encoding documents...")
-    # print('8')
     all_docs = []
 
     # While loop which will loop through the directory in batches of batch_size
@@ -183,8 +185,8 @@ def encode_docs(source=None, batch_size=50, max_num=0):
 
 
         #Multi-threading processing of PDFs
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4)) as executor:
-            futures = [executor.submit(process_pdf, filename) for filename in batched_files]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers_num) as executor:
+            futures = [executor.submit(process_pdf, filename=filename, encoder=i) for i, filename in enumerate(batched_files)]
             for future in concurrent.futures.as_completed(futures):
                 result = future.result()
                 batched.extend(result)
@@ -196,9 +198,7 @@ def encode_docs(source=None, batch_size=50, max_num=0):
         logging.info(f"Uploading batch {loops} to {source}...")
         try:
             if source == 'Pinecone':
-                pinecone_upload(batched)
-            elif source == 'Qdrant':
-                qdrant_upload(batched)
+                asyncio.run(pinecone_upload(batched))
             elif source == 'JSON':
                 convertJSON(batch=batched)
             elif source == None:
@@ -225,25 +225,14 @@ def convertJSON(filename="\\bigdata.json", batch=None):
 
     with open(directory_path, "w") as file:
         json.dump(batch, file)
-        #data = json.load(file)
-        # print(data)
 
 
 def fromJSON(filename="\\bigdata.json", limit=None):
     directory_path = os.getcwd() + filename
     with open(directory_path, "w") as file:
         data = json.load(file)
+
+    # Only grab a certain # of lines
     if limit is not None:
         data = data[:limit]
-    # print(data)
     return data
-
-
-# print("WOAH")
-encode_docs(
-    source=current_source,
-    batch_size=batch_size,
-    max_num=max_num
-)
-
-# fromJSON()
