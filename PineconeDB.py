@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 
@@ -7,7 +8,6 @@ from dotenv import load_dotenv, find_dotenv
 from sentence_transformers import SentenceTransformer
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model_name = "all-mpnet-base-v2"
 embeddings = SentenceTransformer(model_name_or_path="sentence-transformers/all-mpnet-base-v2", device=device)
 
 _ = load_dotenv(find_dotenv())
@@ -25,11 +25,13 @@ def create_pineconedb():
         pinecone.create_index(
             name=index_name,
             dimension=768,
-            metric="cosine"
+            metric="cosine",
+            replicas=2
         )
 
         print("Created new pinecone index")
     starting_time = time.time()
+    time.sleep(5)
 
     # pineconedb = Pinecone.from_documents(
     #     load_pdfs(),
@@ -45,11 +47,11 @@ def search_pinecone(query, k=5):
 
 def pinecone_upload(docs):
     create_pineconedb()
-
     with pinecone.Index(index_name, pool_threads=30) as index:
         index.upsert(
             vectors=docs,
             namespace="PDF_Testing",
-            async_req=True,
-            show_progress=False
+            async_req=False,
+            show_progress=False,
+            batch_size=10
         )

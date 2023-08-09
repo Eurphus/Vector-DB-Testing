@@ -3,7 +3,6 @@ import time
 
 import openai
 from dotenv import find_dotenv, load_dotenv
-from numpy.array_api._array_object import Array
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.models import Distance, VectorParams
 from langchain.vectorstores import Qdrant
@@ -42,7 +41,7 @@ def search_qdrant(query, k=5):
     return results
 
 def qdrant_upload(docs):
-    vectors = [Array]
+    vectors = []
     payload = []
     for doc in docs:
         vectors.append(doc['values'])

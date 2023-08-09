@@ -27,6 +27,8 @@ Picking sentence transformers was not too difficult.
 - **Ada (OPENAI)** embeddings are going to be a lot more expensive than typical local sentence transformers. In the past, I have had issues processing massive datasets due to rate limits and other restrictions imposed by their model. Having data sent in chunks will solve this problem.
   - It is important to consider that ada embeds in a 1536 dimension as well. This WILL lead to higher semantic search times due to the extra math required for so many more dimensions. Again this would lead to higher precision as well, but other models can also do high dimensional embedding without the use of a pricey external API. 
 
+**Final Choice:** Undetermined. I need to finish pre-processing first before choosing between instruct or mpnet
+
 ### Vector Databases
 #### Rejected Databases
 - Chroma

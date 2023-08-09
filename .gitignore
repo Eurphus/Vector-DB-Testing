@@ -8,6 +8,8 @@ metadata.csv
 /.idea/
 /venv/
 .idea
+/logs
+bigdata.json
 
 
 # Byte-compiled / optimized / DLL files
