@@ -37,7 +37,9 @@ Batches of 20 using GPU: 119|122 seconds
 Batches of 50 using GPU: 107 seconds | Maxed out ram usage
 
 Batches of 1 using CPU: 916 seconds
+
 Batches of 5 using CPU: 825 seconds
+
 Batches of 20 using CPU: 744 seconds
 
 #### Analysis
