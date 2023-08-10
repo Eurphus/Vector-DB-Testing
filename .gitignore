@@ -11,6 +11,8 @@ metadata.csv
 /logs
 bigdata.json
 index.py
+MilvusDB.py
+WeaviateDB.py
 
 
 # Byte-compiled / optimized / DLL files
