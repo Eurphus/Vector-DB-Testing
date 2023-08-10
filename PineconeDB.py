@@ -41,9 +41,9 @@ def create_pineconedb():
 #     return index.query(embeddings.embed_query(query), top_k=k, include_metadata=True)
 
 
-async def pinecone_upload(docs):
+def pinecone_upload(docs):
     create_pineconedb()
-    async with pinecone.Index(index_name, pool_threads=30) as index:
+    with pinecone.Index(index_name, pool_threads=30) as index:
         index.upsert(
             vectors=docs,
             namespace="PDF_Testing",

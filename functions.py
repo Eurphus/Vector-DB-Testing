@@ -18,10 +18,10 @@ from tqdm import tqdm
 
 from PineconeDB import pinecone_upload
 # Current Run config
-current_source = "JSON"
-batch_size = 20
+current_source = "Pinecone"
+batch_size = 5
 max_num = 100
-device_override = 'cpu'
+device_override = 'cuda'
 
 # List of configurable options
 model_name = "all-mpnet-base-v2"
@@ -44,10 +44,6 @@ if device_override is None:
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 else:
     device = device_override
-logging.info(f"Using device {device} for embedding "
-             f"Using {max_workers_num} workers"
-             f"Using batches of {batch_size} with a max of {max_num} files"
-             f"Model Name={model_name}, data directory={data_directory}, max chunk size={max_chunk_size}, overlap={overlap}")
 # Define a embedding model for each worker to prevent re-defining them constantly
 # Can't use a single one with using CUDA or else issues arise
 # embeddings = SentenceTransformer(model_name_or_path=model_name, device=device)#[]
@@ -154,7 +150,11 @@ def process_pdf(filename, encoder):
         return []
 
 
-def encode_docs(source=None, batch_size=50, max_num=0):
+def encode_docs(source=None, batch_size=50, max_num=-1):
+    logging.info(f"Using device {device} for embedding "
+                 f"Using {max_workers_num} workers"
+                 f"Using batches of {batch_size} with a max of {max_num} files to {source}"
+                 f"Model Name={model_name}, data directory={data_directory}, max chunk size={max_chunk_size}, overlap={overlap}")
     starting_time = time.time()
 
     # Get current path
@@ -198,9 +198,9 @@ def encode_docs(source=None, batch_size=50, max_num=0):
         logging.info(f"Uploading batch {loops} to {source}...")
         try:
             if source == 'Pinecone':
-                asyncio.run(pinecone_upload(batched))
+                pinecone_upload(batched)
             elif source == 'JSON':
-                convertJSON(batch=batched)
+                asyncio.run(convertJSON(batch=batched))
             elif source == None:
                 all_docs.append(batched)
             logging.info(f"Uploaded batch {loops} to {source} in {time.time() - source_time} seconds")
@@ -218,7 +218,7 @@ def encode_docs(source=None, batch_size=50, max_num=0):
         return all_docs
 
 
-def convertJSON(filename="\\bigdata.json", batch=None):
+async def convertJSON(filename="\\bigdata.json", batch=None):
     if batch is None:
         batch = []
     directory_path = os.getcwd() + filename
