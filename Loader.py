@@ -33,6 +33,7 @@ class MacLoader:
             self,
             device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
             model_name: str = "all-mpnet-base-v2",
+            multithreading: bool = False,
             max_workers_num: int = min(32, (os.cpu_count() or 1)),
             max_chunk_size: int = 1000,
             chunk_overlap: int = 20,
@@ -42,6 +43,7 @@ class MacLoader:
     ) -> None:
         self.device = device
         self.model_name = model_name
+        self.multithreading = multithreading
         self.max_workers_num = max_workers_num
         self.max_chunk_size = max_chunk_size
         self.chunk_overlap = chunk_overlap
@@ -87,7 +89,7 @@ class MacLoader:
     def encode_docs(self,
                     database: any = None,
                     max_num_files: Optional[int] = None,
-                    batch_size: int = 500,
+                    batch_size: int = 500
                     ) -> None:
         """Main method for encoding and loading docs
         :params:
@@ -126,27 +128,43 @@ class MacLoader:
         batched_files = directory[:dir_length]
         batched = []
 
-        # Multi-threading processing of PDFs
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers_num) as executor:
-            futures = [executor.submit(self.process_pdf, filename=filename, encoder=self.encoder(i)) for i, filename in
-                       enumerate(batched_files)]
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
+        if self.multithreading:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers_num) as executor:
+                futures = [executor.submit(self.process_pdf, filename=filename, encoder=self.encoder(i)) for i, filename
+                           in
+                           enumerate(batched_files)]
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result is None or result is []:
+                        continue
+                    batched.extend(result)
+
+                    # Loops batched and uploads for each batch size
+                    while len(batched) >= batch_size:
+                        try:
+                            asyncio.run(database.upload(batched[:batch_size]))
+                            batched = batched[batch_size:]
+                            gc.collect()
+                        except Exception as e:
+                            logging.warning(f"Failed to upload. \nError:{e}")
+                    pbar.update(1)
+        else:
+            for i, filename in enumerate(batched_files):
+                result = self.process_pdf(filename=filename, encoder=self.encoder(i))
                 if result is None or result is []:
                     continue
                 batched.extend(result)
-
-                # Loops batched and uploads for each batch size
                 while len(batched) >= batch_size:
                     try:
-                        asyncio.run(database.upload(batched))
+                        asyncio.run(database.upload(batched[:batch_size]))
                         batched = batched[batch_size:]
                         gc.collect()
                     except Exception as e:
                         logging.warning(f"Failed to upload. \nError:{e}")
                 pbar.update(1)
+
         try:
-            database.upload(batched)
+            asyncio.run(database.upload(batched))
             batched = []
             gc.collect()
         except Exception as e:
@@ -189,7 +207,6 @@ class MacLoader:
 
                 if len(text) == 0:
                     logging.warning(f"PDF with filename {filename} did not detect any text. Deleting")
-                    os.remove(file_path)
                     return {}
                 text = self._clean_text(text)
 
@@ -225,3 +242,22 @@ class MacLoader:
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             return {}
+
+
+    def updateWorkers(self, newValue:int) -> None:
+        """Method to safely update the number of workers
+
+        :param newValue: New num of workers
+        :return:
+        """
+        self.max_workers_num = newValue
+        if self.device == 'cuda':
+
+            # If the array already has more values than needed, cut them. Else add them until satisfied.
+            # Saves time as each SentenceTransformer can take a moment, Rarely will effect a lot but important to consider.
+            if len(self.embeddings) > newValue:
+                self.embeddings = self.embeddings[:newValue]
+            else:
+                while newValue > len(self.embeddings):
+                    self.embeddings.append(SentenceTransformer(model_name_or_path=self.model_name, device=self.device))
+
