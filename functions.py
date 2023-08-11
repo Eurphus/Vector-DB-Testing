@@ -16,11 +16,9 @@ import torch
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-from PineconeDB import pinecone_upload
+from PineconeDB import pinecone_upload, clear_vectors
+
 # Current Run config
-current_source = "Pinecone"
-batch_size = 5
-max_num = 100
 device_override = 'cuda'
 
 # List of configurable options
@@ -36,21 +34,25 @@ date_F = datetime.datetime.now().strftime("%d.%b_%Y_%H.%M.%S")
 
 logging.basicConfig(
     level=logging.INFO,
-    filename=logging_folder + f"{date_F}.txt",
-    # datefmt='%Y-%m-%d_%H:%M:%S'
+    filename=logging_folder + f"{date_F}.txt"
 )
 
 if device_override is None:
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 else:
     device = device_override
+
 # Define a embedding model for each worker to prevent re-defining them constantly
 # Can't use a single one with using CUDA or else issues arise
-# embeddings = SentenceTransformer(model_name_or_path=model_name, device=device)#[]
-# encoder = embeddings
-embeddings = []
-for i in range(max_workers_num):
-    embeddings.append(SentenceTransformer(model_name_or_path=model_name, device=device))
+# CPU can be defined once and not worried about, as it is thread-safe. The GPU counterpart is not.
+if device == 'cuda':
+    embeddings = []
+    for i in range(max_workers_num):
+        embeddings.append(SentenceTransformer(model_name_or_path=model_name, device=device))
+else:
+    embeddings = SentenceTransformer(model_name_or_path=model_name, device=device)
+
+clear_vectors()
 
 def get_file_metadata(filename: str) -> Optional[dict]:
     # Scan metadata.csv for associated data
@@ -62,8 +64,7 @@ def get_file_metadata(filename: str) -> Optional[dict]:
         return {}
     return {
         'file_name': filename,
-        'size': str(located['file_size'].iloc[0]),
-        # Has to be str or int for some reason, was not working before. # Size is in bytes
+        'size': str(located['file_size'].iloc[0]), # Has to be str or int for some reason, was not working before. # Size is in bytes
         'created_at': located['date'].iloc[0][:10]
     }
 
@@ -93,9 +94,6 @@ def clean_text(text):
 
 
 def process_pdf(filename, encoder):
-    encoder = encoder%max_workers_num
-    logging.info(f"Using encoder #{encoder}")
-    encoder = embeddings[encoder]
     text = ""
     directory_path = os.getcwd() + f"/{data_directory}/"
     file_path = directory_path + filename
@@ -113,15 +111,17 @@ def process_pdf(filename, encoder):
                 text += page.extract_text()
 
             if len(text) == 0:
-                logging.warning(f"PDF with filename {filename} did not detect any text. Consider deletion")
+                logging.warning(f"PDF with filename {filename} did not detect any text. Deleting")
+                os.remove(file_path)
                 return {}
             text = clean_text(text)
 
             # Cut down text from PDF into reasonable chunks
             chunks = []
             start_idx = 0
-
+            count = 0
             while start_idx < len(text):
+                count+=1
                 end_idx = start_idx + max_chunk_size
                 if end_idx >= len(text):
                     tmp = text[start_idx:]
@@ -134,7 +134,7 @@ def process_pdf(filename, encoder):
                     continue
 
                 chunks.append({
-                    'id': filename,
+                    'id': f"{filename}-{count}",
                     'metadata': {
                         'file_name': filename,
                         'size': str(metadata['size']),  # Has to be str or int for some reason, was not working
@@ -147,14 +147,14 @@ def process_pdf(filename, encoder):
             return chunks
     except Exception as e:
         logging.error(f"An error occurred: {e}")
-        return []
+        return {}
 
 
-def encode_docs(source=None, batch_size=50, max_num=-1):
-    logging.info(f"Using device {device} for embedding "
-                 f"Using {max_workers_num} workers"
-                 f"Using batches of {batch_size} with a max of {max_num} files to {source}"
-                 f"Model Name={model_name}, data directory={data_directory}, max chunk size={max_chunk_size}, overlap={overlap}")
+def encode_docs(source, batch_size, max_num=0):
+    logging.info(f"""Using device {device} for embedding 
+                 Using {max_workers_num} workers
+                 Using batches of {batch_size} with a max of {max_num} files
+                 Model Name={model_name}, data directory={data_directory}, max chunk size={max_chunk_size}, overlap={overlap}""")
     starting_time = time.time()
 
     # Get current path
@@ -163,62 +163,53 @@ def encode_docs(source=None, batch_size=50, max_num=-1):
 
     dir_length = len(directory)
 
-    if max_num != 0:
-        dir_length=max_num
+    if max_num != 0 and dir_length > max_num:
+        dir_length = max_num
 
-    loops = 0
-    pbar = tqdm(total=math.ceil(dir_length / batch_size), position=1, desc=f"Loading chunks of {batch_size}")
+    pbar = tqdm(total=dir_length, desc=f"Encoding files")
+
     logging.info(f"Encoding documents...")
-    all_docs = []
+    batched_files = directory[:dir_length]
+    batched = []
 
-    # While loop which will loop through the directory in batches of batch_size
-    while dir_length > loops * batch_size:
-        loops += 1
+    # Allow the use of a single chunk of code for encoding for both types of encoding
+    encoder_func = lambda i : embeddings if device == 'cpu' else embeddings[i%max_workers_num]
 
-        limit = batch_size * loops
+    # Multi-threading processing of PDFs
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers_num) as executor:
+        futures = [executor.submit(process_pdf, filename=filename, encoder=encoder_func(i)) for i, filename in
+                   enumerate(batched_files)]
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            if result is None or result is []:
+                continue
+            batched.extend(result)
+            while len(batched) >= batch_size:
+                try:
+                    if source == 'Pinecone':
+                        pinecone_upload(batched[:batch_size])
+                    elif source == 'JSON':
+                        convertJSON(batch=batched[:batch_size])
+                    batched = batched[batch_size:]
+                    gc.collect()
+                except Exception as e:
+                    logging.warning(f"Failed to upload. \nError:{e}")
+            pbar.update(1)
+    try:
+        if source == 'Pinecone':
+            pinecone_upload(batched)
+        elif source == 'JSON':
+            convertJSON(batch=batched)
         batched = []
-        if limit > dir_length:
-            limit = dir_length
-
-        # Returns the files only in the current batch
-        batched_files = directory[(loops - 1) * batch_size:limit]
-
-
-        #Multi-threading processing of PDFs
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers_num) as executor:
-            futures = [executor.submit(process_pdf, filename=filename, encoder=i) for i, filename in enumerate(batched_files)]
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                batched.extend(result)
-        # for doc in batched_files:
-        #     batched.extend(process_pdf(doc))
-
-        # Upload to VectorDB based off of preference
-        source_time = time.time()
-        logging.info(f"Uploading batch {loops} to {source}...")
-        try:
-            if source == 'Pinecone':
-                pinecone_upload(batched)
-            elif source == 'JSON':
-                asyncio.run(convertJSON(batch=batched))
-            elif source == None:
-                all_docs.append(batched)
-            logging.info(f"Uploaded batch {loops} to {source} in {time.time() - source_time} seconds")
-        except Exception as e:
-            logging.warning(f"Batch failed to upload batch {loops}. \nError:{e}")
-
-        # Clear memory
-        batched = None
         gc.collect()
-        pbar.update(1)
+    except Exception as e:
+        logging.warning(f"Failed to upload. \nError:{e}")
 
     logging.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
     pbar.close()
-    if source is None:
-        return all_docs
 
 
-async def convertJSON(filename="\\bigdata.json", batch=None):
+def convertJSON(filename="\\bigdata.json", batch=None):
     if batch is None:
         batch = []
     directory_path = os.getcwd() + filename

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import time
@@ -12,6 +13,7 @@ pinecone.init(
     environment='us-west4-gcp-free'
 )
 index_name = "pdf-flood"
+index = pinecone.Index(index_name, pool_threads=30)
 
 
 def create_pineconedb():
@@ -25,29 +27,25 @@ def create_pineconedb():
         )
 
         print("Created new pinecone index")
-    starting_time = time.time()
-    time.sleep(5)
+        asyncio.sleep(2)
 
-    # pineconedb = Pinecone.from_documents(
-    #     load_pdfs(),
-    #     embeddings,
-    #     index_name=index_name
-    # )
-    # print(f"Embedding PDFS took {time.time() - starting_time}s total")
-
-
-# def search_pinecone(query, k=5):
-#     index = pinecone.Index(index_name=index_name)
-#     return index.query(embeddings.embed_query(query), top_k=k, include_metadata=True)
-
+def clear_vectors():
+    index.delete(
+        namespace="PDF_Testing",
+        delete_all=True
+    )
+    logging.info(f"All vectors in namespace {index_name} have been deleted")
 
 def pinecone_upload(docs):
+    logging.info(f"Uploading {len(docs)} docs to pinecone")
+    start_time = time.time()
     create_pineconedb()
-    with pinecone.Index(index_name, pool_threads=30) as index:
-        index.upsert(
+    with index as upload:
+        upload.upsert(
             vectors=docs,
             namespace="PDF_Testing",
             async_req=False,
             show_progress=False,
-            batch_size=10
+            batch_size=None
         )
+    logging.info(f"Uploaded to pinecone in {time.time()-start_time}")
