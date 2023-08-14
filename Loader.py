@@ -111,8 +111,9 @@ class MacLoader:
             elif database == "Pinecone":
                 from databases.PineconeDB import PineconeDB
                 database = PineconeDB()
-        else:
-            database = database
+
+        # Faster uploading for applicable databases
+        database.indexing(False)
 
         # Get current path
         directory_path = os.getcwd() + f"/{self.data_directory}/"
@@ -172,6 +173,7 @@ class MacLoader:
 
         logging.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
         pbar.close()
+        database.indexing(True)
         self.doc_count = 0
 
     def get_file_metadata(self, filename: str) -> Optional[dict]:

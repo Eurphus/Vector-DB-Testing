@@ -140,6 +140,7 @@ class QDrantDB(Database):
 
     def indexing(self, enable: bool) -> None:
         if enable:
+            logging.info("Enabling indexing...")
             self.client.update_collection(
                 collection_name=self.index_name,
                 optimizer_config=models.OptimizersConfigDiff(
@@ -147,7 +148,8 @@ class QDrantDB(Database):
                     memmap_threshold=20000
                 )
             )
-        if enable:
+        else:
+            logging.info("Disabling indexing...")
             self.client.update_collection(
                 collection_name=self.index_name,
                 optimizer_config=models.OptimizersConfigDiff(

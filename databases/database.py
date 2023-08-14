@@ -32,3 +32,6 @@ class Database:
 
     def encode(self, text: str) -> list:
         return self.encoder.encode(text, show_progress_bar=False).tolist()
+
+    def indexing(self, enable: bool) -> None:
+        pass
