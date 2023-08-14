@@ -1,9 +1,11 @@
 import logging
-import time
-import pinecone
-from databases.database import Database
 import os
+import time
+
+import pinecone
 from dotenv import load_dotenv, find_dotenv
+
+from databases.database import Database
 
 
 class PineconeDB(Database):
@@ -13,7 +15,7 @@ class PineconeDB(Database):
                  environment: str = 'us-west4-gcp-free',
                  pool_threads: int = 30,
                  default_namespace: str = "development",
-                 ensure_exists: bool = False,
+                 ensure_exists: bool = True,
                  GRPC: bool = False
                  ) -> None:
         super().__init__()
@@ -49,7 +51,7 @@ class PineconeDB(Database):
             replicas (int): Numbers of replicas of each added vector
         """
         if self.index_name not in pinecone.list_indexes():
-            print("Initializing new pinecone index...")
+            logging.info("Initializing new pinecone index...")
             pinecone.create_index(
                 name=self.index_name,
                 dimension=self.model_dimensions,
@@ -57,7 +59,7 @@ class PineconeDB(Database):
                 replicas=2
             )
 
-            print("Created new pinecone index")
+            logging.info("Created new pinecone index")
 
     def clear(self, namespace: str = None) -> None:
         """Delete all vectors in a namespace
@@ -94,9 +96,12 @@ class PineconeDB(Database):
 
         logging.info(f"Uploaded to pinecone in {time.time() - start_time}")
 
-    def query(self, text: str, top_k: int = 5):
+    def query(self, text: str, top_k: int = 5, include_values: bool = False, include_metadata: bool = True):
         result = self.index.query(
             vector=self.encode(text),
-            top_k=top_k
+            top_k=top_k,
+            namespace=self.default_namespace,
+            include_metadata=include_metadata,
+            include_values=include_values
         )
         return result

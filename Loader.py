@@ -1,7 +1,9 @@
 import asyncio
 import concurrent.futures
 import gc
+import json
 import logging
+import os
 import re
 import time
 from typing import Optional
@@ -9,8 +11,6 @@ from typing import Optional
 import PyPDF2
 import pandas as pd
 import torch
-import os
-
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
@@ -50,6 +50,7 @@ class MacLoader:
         self.data_directory = data_directory
         self.JSONFilename = JSONFilename
         self.metadata_file = metadata_file
+        self.doc_count = 0
         if device == 'cuda':
             self.embeddings = []
             for i in range(max_workers_num):
@@ -131,8 +132,7 @@ class MacLoader:
         if self.multithreading:
             with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers_num) as executor:
                 futures = [executor.submit(self.process_pdf, filename=filename, encoder=self.encoder(i)) for i, filename
-                           in
-                           enumerate(batched_files)]
+                           in enumerate(batched_files)]
                 for future in concurrent.futures.as_completed(futures):
                     result = future.result()
                     if result is None or result is []:
@@ -172,6 +172,7 @@ class MacLoader:
 
         logging.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
         pbar.close()
+        self.doc_count = 0
 
     def get_file_metadata(self, filename: str) -> Optional[dict]:
         # Scan metadata.csv for associated data
@@ -182,7 +183,7 @@ class MacLoader:
             logging.error(f"Could not find {filename} in metadata.csv")
             return {}
         return {
-            'file_name': filename,
+            'filename': filename,
             'size': str(located['file_size'].iloc[0]),
             # Has to be str or int for some reason, was not working before. # Size is in bytes
             'created_at': located['date'].iloc[0][:10]
@@ -207,6 +208,8 @@ class MacLoader:
 
                 if len(text) == 0:
                     logging.warning(f"PDF with filename {filename} did not detect any text. Deleting")
+                    with open(directory_path + "delete.json", "w") as file:
+                        json.dump(filename, file)
                     return {}
                 text = self._clean_text(text)
 
@@ -228,23 +231,24 @@ class MacLoader:
                         continue
 
                     chunks.append({
-                        'id': f"{filename}-{count}",
+                        'id': str(self.doc_count),
                         'metadata': {
-                            'file_name': filename,
+                            'filename': filename,
                             'size': str(metadata['size']),  # Has to be str or int for some reason, was not working
                             'created_at': metadata['created_at'],
-                            'text': tmp
+                            'text': tmp,
+                            'chunk': count
                         },
                         'values': vectors
                     })
+                    self.doc_count = self.doc_count + 1
                     start_idx = end_idx - self.chunk_overlap
                 return chunks
         except Exception as e:
             logging.error(f"An error occurred: {e}")
             return {}
 
-
-    def updateWorkers(self, newValue:int) -> None:
+    def updateWorkers(self, newValue: int) -> None:
         """Method to safely update the number of workers
 
         :param newValue: New num of workers
@@ -260,4 +264,3 @@ class MacLoader:
             else:
                 while newValue > len(self.embeddings):
                     self.embeddings.append(SentenceTransformer(model_name_or_path=self.model_name, device=self.device))
-
