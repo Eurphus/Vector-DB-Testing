@@ -53,7 +53,7 @@ For GPU, I would not recommend going over 12 on any hardware. Diminishing return
 
 
 ## Pre-processing Benchmark V2
-[Code Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/678bf7b28bd9ad0ebdae15ae3ada29743209b894)
+[Code Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/fc1caef87131ceae52013c7654bd080036c43261)
 
 Loading 100 various PDF files with different formats and lengths of text.
 For all runs, sentence transformers were defined at the beginning and never overlapped while running. 
