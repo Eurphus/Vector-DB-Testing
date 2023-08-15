@@ -12,33 +12,41 @@ from pymilvus import (
     Collection,
 )
 
+
 class MilvusDB(Database):
     def __init__(self,
-                 index_name: str = "pdf-flood",
-                 api_key: str = None,
+                 index_name: str = "pdf_flood",
                  url: str = None,
                  port: int = None,
+                 user: str = None,
+                 password: str = None,
                  ensure_exists: bool = True,
                  ) -> None:
         super().__init__()
         self.index_name = index_name
 
-        if api_key is None:
-            _ = load_dotenv(find_dotenv())
-            api_key = os.environ["Milvus_API_KEY"]
         if url is None:
             _ = load_dotenv(find_dotenv())
-            url = os.environ["Milvus_URL"]
+            url = os.environ["MILVUS_URL"]
         if port is None:
             _ = load_dotenv(find_dotenv())
-            port = os.environ["Milvus_PORT"]
+            port = os.environ["MILVUS_PORT"]
+        if user is None:
+            _ = load_dotenv(find_dotenv())
+            user = os.environ["MILVUS_USER"]
+        if password is None:
+            _ = load_dotenv(find_dotenv())
+            password = os.environ["MILVUS_PASSWORD"]
 
         connections.connect(
-            #user="DEFAULT",
-            api_key=api_key,
-            url=url,
-            port=port
+            uri=url + ":" + port,
+            token=user + ":" + password
         )
+        if ensure_exists:
+            self.create()
+            time.sleep(1)
+
+        self.collection = Collection(name=self.index_name, using="default")
 
     def create(self) -> None:
         """
@@ -46,15 +54,67 @@ class MilvusDB(Database):
         """
         logging.info("Initializing new Milvus Collection...")
         try:
+            if utility.has_collection(self.index_name):
+                logging.info("Collection already exists, skipping creation.")
+                return
+            fields = [
+                FieldSchema(
+                    name="id",
+                    dtype=DataType.INT64,
+                    is_primary=True,
+                    description="Unique document ID, right now it has a crap system."
+                ),
+                FieldSchema(
+                    name="embedding",
+                    dtype=DataType.FLOAT_VECTOR,
+                    description="Vectors of the document",
+                    dim=768,
+                ),
+                FieldSchema(
+                    name="metadata",
+                    dtype=DataType.JSON,
+                    description="Important metadata associated with the document"
+                ),
+                FieldSchema(
+                    name="text",
+                    dtype=DataType.VARCHAR,
+                    max_length=1100,
+                    description="Text of the document"
+                )
+            ]
+
+            schema = CollectionSchema(
+                fields=fields,
+                description="PDF Flood Index",
+                enable_dynamic_field=True
+            )
+
+            collection = Collection(
+                name=self.index_name,
+                schema=schema,
+                using="default",
+                #  num_shards=2
+            )
+
+            collection.create_index(
+                field_name="embedding",
+                index_params={
+                    "metric_type": "IP",
+                    "index_type": "HNSW",
+                    "params": {"nlist": 768}
+                },
+            )
+            collection.load()
             logging.info("Created new Milvus Collection")
         except Exception as e:
-            logging.info(f"Error, there is likely already an existing Milvus database with that name. See error:{e}")
+            logging.critical(f"Something went wrong. See error: {e}")
 
     def clear(self) -> None:
         """Delete all vectors in a collection. The fastest way to do this is by deleting and recreating the collection
 
         :return:
         """
+        self.collection.drop()
         self.create()
         logging.info(f"All vectors have been deleted")
 
@@ -66,9 +126,10 @@ class MilvusDB(Database):
         """
         logging.info(f"Uploading {len(batch)} docs to Milvus")
 
-        batched = self.preprocess(batch)
-
         start_time = time.time()
+        batch = self.preprocess(batch)
+
+        self.collection.insert(batch)
 
         logging.info(f"Uploaded to Milvus in {time.time() - start_time}")
 
@@ -78,19 +139,53 @@ class MilvusDB(Database):
 
         :param text: Text to query with
         :param top_k: How many results to return
-        :param query_filter: Filter associated with the search, ignore this part until properly implemented
         :param include_metadata: Whether to include payload within the response to the search
         :param include_vectors: Whether to include vectors within the response to the search
         :return:
         """
-        result = []
-        return result
+        logging.info(f"Querying Milvus with {text}")
+
+        search_params = {
+            "metric_type": "IP",
+            "offset": 0,
+            "ignore_growing": False,
+            "params": {"nprobe": 10}
+        }
+        output_fields = ["id"]
+        if include_metadata:
+            output_fields.append("metadata")
+            output_fields.append("text")
+        if include_vectors:
+            output_fields.append("embedding")
+
+        results = self.collection.search(
+            data=[self.encode(text)],
+            limit=top_k,
+            output_fields=output_fields,
+            anns_field="embedding",
+            param=search_params,
+            expr=None
+        )
+        return results[0]
 
     def preprocess(self, batch):
-        """Method to be used within the MilvusDB class in order to process data via the other format
+        """Method to be used within the Milvus class in order to change the format of the batch to be uploaded
 
-        :param batch:
+        :param batch: Batch to be uploaded
         :return:
         """
+        ids = []
+        vectors = []
+        metadata = []
+        text = []
+        for doc in batch:
+            ids.append(int(doc['id']))
+            vectors.append(doc['values'])
+            text.append(doc['metadata']['text'])
+            del doc['metadata']['text']
+            doc['metadata']['document_id'] = doc['metadata']['filename']
+            doc['metadata']['chunk'] = doc['metadata']['chunk']
+            metadata.append(doc['metadata'])
         logging.info("Milvus preprocessing complete")
-        return []
+        return [ids, vectors, metadata, text]
+

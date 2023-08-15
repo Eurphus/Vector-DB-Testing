@@ -84,12 +84,11 @@ class QDrantDB(Database):
         """
         logging.info(f"Uploading {len(batch)} docs to QDrant")
 
-        batched = self.preprocess(batch)
-
         start_time = time.time()
+        batch = self.preprocess(batch)
         self.client.upsert(
             collection_name=self.index_name,
-            points=batched
+            points=batch
         )
 
         logging.info(f"Uploaded to QDrant in {time.time() - start_time}")

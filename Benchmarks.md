@@ -2,7 +2,7 @@
 - **CPU:** 5600X w/PBO (Up to 4.6Mhz)
 - **GPU:** RTX 3090 w/ Cuda 11.8
 - **Ram:** 16GB 3000Mhz CL16 ram
-- **Storage:** M.2 NVME SSD, unsure of IO speeds but it would not be limiting in this benchmark
+- **Storage:** M.2 NVME SSD, unsure of IO speeds, but it would not be limiting in this benchmark
 
 Thermal throttling did not happen in any of these benchmarks. Temperatures were always within reasonable ranges.
 
@@ -49,7 +49,7 @@ Loading 50 various PDF files with different formats and lengths of text to PINEC
 Non-multithreading loads were always longer, even with GPU. Interestingly, GPU running with a single concurrent worker was the absolute fastest for some reason. I do not fully understand why, but it may relate to my next point.
 The optimal number of workers is dependent on the size of your data set. The larger the data, the better more workers are. However, the more workers the slower it is for very large PDFs to get encoded. Heavy PDFs take very long, and with loads distributed amongst so many threads, it takes even longer. This leads to higher # of workers completing the first 40 PDFs very fast, but struggling more on the last few as the machine is not focusing as much as it should on them. 
 
-For GPU, I would not recommend going over 12 on any hardware. Diminishing returns occur even before than, and the extra Sentence Transformer loading time is not worth it. If all PDF files are the same size, testing should be determiend to see the best one for both.
+For GPU, I would not recommend going over 12 on any hardware. Diminishing returns occur even before than, and the extra Sentence Transformer loading time is not worth it. If all PDF files are the same size, testing should be determined to see the best one for both.
 
 
 ## Pre-processing Benchmark V2
@@ -70,8 +70,8 @@ For all runs, sentence transformers were defined at the beginning and never over
 ## Pre-processing Benchmarks V1
 [Code Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/0b88a65250776860a0efa5c4af21b6e9624759c4)
 
-Using concurrent threadpoolexecutor. Loading 100 various PDF files with different formats and lengths of text.
-For GPU runs, the embedding model was redefined per every thread except for single batches. Otherwise it was defined once.
+Using concurrent ThreadPoolExecutor. Loading 100 various PDF files with different formats and lengths of text.
+For GPU runs, the embedding model was redefined per every thread except for single batches. Otherwise, it was defined once.
 
 ### TO PINECONE
 | Batch Size | CPU  | GPU |
@@ -93,4 +93,4 @@ Does more burst GPU tasks, significantly less CPU usage. Very high memory use on
 
 #### Analysis
 I was surprised at the drastic difference between Pinecone and local. The act of uploading to pinecone alone takes a lot of time and should be done async. There is still a lot of optimization to be done. The main problem is using threads as well, processes or workers with their own embedding model will be more efficient. The lack of this lead to the increase in time as batch times increased during local writing.
-The code is definetely not very optimized at this point.
+The code is definitely not very optimized at this point.

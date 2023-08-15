@@ -166,10 +166,9 @@ class MacLoader:
 
         try:
             asyncio.run(database.upload(batched))
-            batched = []
             gc.collect()
         except Exception as e:
-            logging.warning(f"Failed to upload. \nError:{e}")
+            logging.warning(f"Failed to upload. \nError: {e}")
 
         logging.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
         pbar.close()
@@ -260,7 +259,7 @@ class MacLoader:
         if self.device == 'cuda':
 
             # If the array already has more values than needed, cut them. Else add them until satisfied.
-            # Saves time as each SentenceTransformer can take a moment, Rarely will effect a lot but important to consider.
+            # Saves time as each SentenceTransformer can take a moment, Rarely will affect a lot but important to consider.
             if len(self.embeddings) > newValue:
                 self.embeddings = self.embeddings[:newValue]
             else:
