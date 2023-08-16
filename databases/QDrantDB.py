@@ -10,6 +10,13 @@ from databases.database import Database
 
 
 class QDrantDB(Database):
+    """ QDrant Database Class for interacting with a defined QDrant collection
+    Args:
+        index_name (str): Name of QDrant collection
+        api_key (str): API key for QDrant server
+        url (str): URL of QDrant server
+        ensure_exists (bool): Whether to create collection if it does not exist
+    """
     def __init__(self,
                  index_name: str = "pdf-flood",
                  api_key: str = None,
@@ -17,6 +24,7 @@ class QDrantDB(Database):
                  ensure_exists: bool = True,
                  ) -> None:
         super().__init__()
+        self.logger = logging.getLogger(__name__)
         self.index_name = index_name
 
         if api_key is None:

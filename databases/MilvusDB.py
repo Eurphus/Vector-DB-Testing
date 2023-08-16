@@ -14,6 +14,15 @@ from pymilvus import (
 
 
 class MilvusDB(Database):
+    """ Milvus Database Class for interacting with a defined Milvus index
+    Args:
+        index_name (str): Name of Milvus index
+        url (str): URL of Milvus server
+        port (int): Port of Milvus server
+        user (str): Username of Milvus server
+        password (str): Password of Milvus server
+        ensure_exists (bool): Whether to create index if it does not exist
+    """
     def __init__(self,
                  index_name: str = "pdf_flood",
                  url: str = None,
@@ -23,6 +32,7 @@ class MilvusDB(Database):
                  ensure_exists: bool = True,
                  ) -> None:
         super().__init__()
+        self.logger = logging.getLogger(__name__)
         self.index_name = index_name
 
         if url is None:
@@ -52,10 +62,10 @@ class MilvusDB(Database):
         """
         Create new Milvus index if one does not exist
         """
-        logging.info("Initializing new Milvus Collection...")
+        self.logger.info("Initializing new Milvus Collection...")
         try:
             if utility.has_collection(self.index_name):
-                logging.info("Collection already exists, skipping creation.")
+                self.logger.info("Collection already exists, skipping creation.")
                 return
             fields = [
                 FieldSchema(
@@ -105,9 +115,9 @@ class MilvusDB(Database):
                 },
             )
             collection.load()
-            logging.info("Created new Milvus Collection")
+            self.logger.info("Created new Milvus Collection")
         except Exception as e:
-            logging.critical(f"Something went wrong. See error: {e}")
+            self.logger.critical(f"Something went wrong. See error: {e}")
 
     def clear(self) -> None:
         """Delete all vectors in a collection. The fastest way to do this is by deleting and recreating the collection
@@ -116,7 +126,7 @@ class MilvusDB(Database):
         """
         self.collection.drop()
         self.create()
-        logging.info(f"All vectors have been deleted")
+        self.logger.info(f"All vectors have been deleted")
 
     async def upload(self, batch: list) -> None:
         """Method to upload vectors to Milvus
@@ -124,14 +134,14 @@ class MilvusDB(Database):
         :param batch: Batch to upload
         :return:
         """
-        logging.info(f"Uploading {len(batch)} docs to Milvus")
+        self.logger.info(f"Uploading {len(batch)} docs to Milvus")
 
         start_time = time.time()
         batch = self.preprocess(batch)
 
         self.collection.insert(batch)
 
-        logging.info(f"Uploaded to Milvus in {time.time() - start_time}")
+        self.logger.info(f"Uploaded to Milvus in {time.time() - start_time}")
 
     def query(self, text: str, top_k: int = 5, include_metadata: bool = True,
               include_vectors: bool = False):
@@ -143,7 +153,7 @@ class MilvusDB(Database):
         :param include_vectors: Whether to include vectors within the response to the search
         :return:
         """
-        logging.info(f"Querying Milvus with {text}")
+        self.logger.info(f"Querying Milvus with {text}")
 
         search_params = {
             "metric_type": "IP",
@@ -186,6 +196,6 @@ class MilvusDB(Database):
             doc['metadata']['document_id'] = doc['metadata']['filename']
             doc['metadata']['chunk'] = doc['metadata']['chunk']
             metadata.append(doc['metadata'])
-        logging.info("Milvus preprocessing complete")
+        self.logger.info("Milvus preprocessing complete")
         return [ids, vectors, metadata, text]
 

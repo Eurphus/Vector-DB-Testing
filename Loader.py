@@ -24,6 +24,7 @@ class MacLoader:
         max_workers_num (int): Max amount of workers/threads to run at the same time. If not specified it will default to amount of threads your CPU supports.
         max_chunk_size (int): Max amount of characters per every chunk of data. Higher for greater context, lower for greater context.
         chunk_overlap (int): Amount of overlap between chunks.
+        chunked_vectors (bool): Whether to complete chunked data one by one or all at once. False for one by one, True for all at once.
         data_directory (str): Directory where all data is found.
         JSONFilename (str): Name of file to write JSON data to if applicable.
         metadata_file (str): If applicable, file where metadata information is found.
@@ -37,6 +38,7 @@ class MacLoader:
             max_workers_num: int = min(32, (os.cpu_count() or 1)),
             max_chunk_size: int = 1000,
             chunk_overlap: int = 20,
+            chunked_vectors: bool = False,
             data_directory: str = "data",
             JSONFilename: str = "data",
             metadata_file: str = "metadata.csv"
@@ -47,10 +49,13 @@ class MacLoader:
         self.max_workers_num = max_workers_num
         self.max_chunk_size = max_chunk_size
         self.chunk_overlap = chunk_overlap
+        self.chunked_vectors = chunked_vectors
         self.data_directory = data_directory
         self.JSONFilename = JSONFilename
         self.metadata_file = metadata_file
         self.doc_count = 0
+
+        self.logger = logging.getLogger(__name__)
         if device == 'cuda':
             self.embeddings = []
             for i in range(max_workers_num):
@@ -99,7 +104,7 @@ class MacLoader:
             batch_size (int): Number of accumulated batches until an upload is triggered
         :return:
         """
-        logging.info(f"""Using device {self.device} for embedding 
+        self.logger.info(f"""Using device {self.device} for embedding 
                      Using {self.max_workers_num} workers
                      Using batches of {self.max_chunk_size} with a max of {max_num_files} files
                      Model Name={self.model_name}, data directory={self.data_directory}, max chunk size={self.max_chunk_size}, overlap={self.chunk_overlap}""")
@@ -126,7 +131,7 @@ class MacLoader:
 
         pbar = tqdm(total=dir_length, desc=f"Encoding files")
 
-        logging.info(f"Encoding documents...")
+        self.logger.info(f"Encoding documents...")
         batched_files = directory[:dir_length]
         batched = []
 
@@ -147,7 +152,7 @@ class MacLoader:
                             batched = batched[batch_size:]
                             gc.collect()
                         except Exception as e:
-                            logging.warning(f"Failed to upload. \nError:{e}")
+                            self.logger.warning(f"Failed to upload. \nError:{e}")
                     pbar.update(1)
         else:
             for i, filename in enumerate(batched_files):
@@ -161,16 +166,16 @@ class MacLoader:
                         batched = batched[batch_size:]
                         gc.collect()
                     except Exception as e:
-                        logging.warning(f"Failed to upload. \nError:{e}")
+                        self.logger.warning(f"Failed to upload. \nError:{e}")
                 pbar.update(1)
 
         try:
             asyncio.run(database.upload(batched))
             gc.collect()
         except Exception as e:
-            logging.warning(f"Failed to upload. \nError: {e}")
+            self.logger.warning(f"Failed to upload. \nError: {e}")
 
-        logging.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
+        self.logger.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
         pbar.close()
         database.indexing(True)
         self.doc_count = 0
@@ -181,7 +186,7 @@ class MacLoader:
         filename = filename.replace(".pdf", "").replace(self.data_directory, "").replace('\\', "")
         located = df.loc[df['digest'] == filename]
         if located.empty:
-            logging.error(f"Could not find {filename} in metadata.csv")
+            self.logger.error(f"Could not find {filename} in metadata.csv")
             return {}
         return {
             'filename': filename,
@@ -208,7 +213,7 @@ class MacLoader:
                     text += page.extract_text()
 
                 if len(text) == 0:
-                    logging.warning(f"PDF with filename {filename} did not detect any text. Deleting")
+                    self.logger.warning(f"PDF with filename {filename} did not detect any text. Deleting")
                     with open(directory_path + "delete.json", "w") as file:
                         json.dump(filename, file)
                     return {}
@@ -216,6 +221,7 @@ class MacLoader:
 
                 # Cut down text from PDF into reasonable chunks
                 chunks = []
+                chunked_text = []
                 start_idx = 0
                 count = 0
                 while start_idx < len(text):
@@ -225,11 +231,10 @@ class MacLoader:
                         tmp = text[start_idx:]
                     else:
                         tmp = text[start_idx:end_idx]
-                    try:
-                        vectors = encoder.encode(tmp, show_progress_bar=False).tolist()
-                    except Exception as e:
-                        logging.warning(f"An error occurred while embedding. File {filename} and end {end_idx}: {e}")
-                        continue
+                    if self.chunked_vectors:
+                        chunked_text.append(tmp)
+
+                    vectors = None if self.chunked_vectors else encoder.encode(tmp, show_progress_bar=False).tolist()
 
                     chunks.append({
                         'id': str(self.doc_count),
@@ -244,9 +249,15 @@ class MacLoader:
                     })
                     self.doc_count = self.doc_count + 1
                     start_idx = end_idx - self.chunk_overlap
+
+                if self.chunked_vectors:
+                    vectorized_chunks = encoder.encode(chunked_text, show_progress_bar=False)
+                    for i, chunk in enumerate(chunks):
+                        chunk['values'] = vectorized_chunks[i].tolist()
+
                 return chunks
         except Exception as e:
-            logging.error(f"An error occurred: {e}")
+            self.logger.error(f"An error occurred: {e}")
             return {}
 
     def updateWorkers(self, newValue: int) -> None:

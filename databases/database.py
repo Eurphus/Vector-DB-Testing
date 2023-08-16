@@ -1,10 +1,11 @@
+import logging
+
 import torch
 from sentence_transformers import SentenceTransformer
 
 
 class Database:
-    """Abstract class for other classes to use.
-
+    """Abstract class for other classes to use. Do not use directly.
     """
 
     def __init__(self,

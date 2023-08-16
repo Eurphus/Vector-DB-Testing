@@ -9,6 +9,16 @@ from databases.database import Database
 
 
 class PineconeDB(Database):
+    """Pinecone Database Class for interacting with a defined Pinecone index
+    Args:
+        index_name (str): Name of Pinecone index
+        api_key (str): API key for Pinecone server
+        environment (str): Environment of Pinecone server
+        pool_threads (int): Number of threads to use for Pinecone server
+        default_namespace (str): Default namespace for Pinecone server
+        ensure_exists (bool): Whether to create index if it does not exist
+        GRPC (bool): Whether to use GRPC for Pinecone server
+    """
     def __init__(self,
                  index_name: str = "pdf-flood",
                  api_key: str = None,
@@ -19,6 +29,7 @@ class PineconeDB(Database):
                  GRPC: bool = False
                  ) -> None:
         super().__init__()
+        self.logger = logging.getLogger(__name__)
         self.index_name = index_name
         self.default_namespace = default_namespace
 
@@ -51,7 +62,7 @@ class PineconeDB(Database):
             replicas (int): Numbers of replicas of each added vector
         """
         if self.index_name not in pinecone.list_indexes():
-            logging.info("Initializing new pinecone index...")
+            self.logger.info("Initializing new pinecone index...")
             pinecone.create_index(
                 name=self.index_name,
                 dimension=self.model_dimensions,
@@ -59,7 +70,7 @@ class PineconeDB(Database):
                 replicas=2
             )
 
-            logging.info("Created new pinecone index")
+            self.logger.info("Created new pinecone index")
 
     def clear(self, namespace: str = None) -> None:
         """Delete all vectors in a namespace
@@ -73,7 +84,7 @@ class PineconeDB(Database):
             namespace=namespace,
             delete_all=True
         )
-        logging.info(f"All vectors in namespace {namespace} have been deleted")
+        self.logger.info(f"All vectors in namespace {namespace} have been deleted")
 
     async def upload(self, batch: list, namespace: str = None) -> None:
         """Method to upload vectors to pinecone
@@ -82,7 +93,7 @@ class PineconeDB(Database):
         :param namespace: Namespace to upload vectors under
         :return:
         """
-        logging.info(f"Uploading {len(batch)} docs to pinecone")
+        self.logger.info(f"Uploading {len(batch)} docs to pinecone")
         start_time = time.time()
         if namespace is None:
             namespace = self.default_namespace
@@ -94,7 +105,7 @@ class PineconeDB(Database):
             batch_size=None  # What is the upper limit? Find the absolute max before the API rejects due to 2MB+ uploads
         )
 
-        logging.info(f"Uploaded to pinecone in {time.time() - start_time}")
+        self.logger.info(f"Uploaded to pinecone in {time.time() - start_time}")
 
     def query(self, text: str, top_k: int = 5, include_values: bool = False, include_metadata: bool = True):
         result = self.index.query(
