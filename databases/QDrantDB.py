@@ -17,6 +17,7 @@ class QDrantDB(Database):
         url (str): URL of QDrant server
         ensure_exists (bool): Whether to create collection if it does not exist
     """
+
     def __init__(self,
                  index_name: str = "pdf-flood",
                  api_key: str = None,

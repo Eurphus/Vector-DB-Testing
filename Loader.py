@@ -1,7 +1,6 @@
 import asyncio
 import concurrent.futures
 import gc
-import json
 import logging
 import os
 import re
@@ -24,7 +23,6 @@ class MacLoader:
         max_workers_num (int): Max amount of workers/threads to run at the same time. If not specified it will default to amount of threads your CPU supports.
         max_chunk_size (int): Max amount of characters per every chunk of data. Higher for greater context, lower for greater context.
         chunk_overlap (int): Amount of overlap between chunks.
-        chunked_vectors (bool): Whether to complete chunked data one by one or all at once. False for one by one, True for all at once.
         data_directory (str): Directory where all data is found.
         JSONFilename (str): Name of file to write JSON data to if applicable.
         metadata_file (str): If applicable, file where metadata information is found.
@@ -34,11 +32,10 @@ class MacLoader:
             self,
             device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
             model_name: str = "all-mpnet-base-v2",
-            multithreading: bool = False,
-            max_workers_num: int = min(32, (os.cpu_count() or 1)),
+            multithreading: bool = True,
+            max_workers_num: int = 1,
             max_chunk_size: int = 1000,
             chunk_overlap: int = 20,
-            chunked_vectors: bool = False,
             data_directory: str = "data",
             JSONFilename: str = "data",
             metadata_file: str = "metadata.csv"
@@ -49,7 +46,6 @@ class MacLoader:
         self.max_workers_num = max_workers_num
         self.max_chunk_size = max_chunk_size
         self.chunk_overlap = chunk_overlap
-        self.chunked_vectors = chunked_vectors
         self.data_directory = data_directory
         self.JSONFilename = JSONFilename
         self.metadata_file = metadata_file
@@ -147,12 +143,15 @@ class MacLoader:
 
                     # Loops batched and uploads for each batch size
                     while len(batched) >= batch_size:
+                        tmp = batched[:batch_size]
+                        batched = batched[batch_size:]
                         try:
-                            asyncio.run(database.upload(batched[:batch_size]))
-                            batched = batched[batch_size:]
-                            gc.collect()
+                            asyncio.run(database.upload(tmp))
                         except Exception as e:
-                            self.logger.warning(f"Failed to upload. \nError:{e}")
+                            self.logger.critical(f"Failed to upload, skipping batch! See batch:\n")
+                            self.logger.exception(e)
+                            break
+                    gc.collect()
                     pbar.update(1)
         else:
             for i, filename in enumerate(batched_files):
@@ -161,19 +160,21 @@ class MacLoader:
                     continue
                 batched.extend(result)
                 while len(batched) >= batch_size:
+                    tmp = batched[:batch_size]
+                    batched = batched[batch_size:]
                     try:
-                        asyncio.run(database.upload(batched[:batch_size]))
-                        batched = batched[batch_size:]
-                        gc.collect()
+                        asyncio.run(database.upload(tmp))
                     except Exception as e:
-                        self.logger.warning(f"Failed to upload. \nError:{e}")
+                        self.logger.critical(f"Failed to upload, skipping batch! See batch:\n")
+                        self.logger.exception(e)
+                        break
                 pbar.update(1)
 
         try:
-            asyncio.run(database.upload(batched))
-            gc.collect()
+            asyncio.run(database.upload(batched[:batch_size]))
         except Exception as e:
-            self.logger.warning(f"Failed to upload. \nError: {e}")
+            self.logger.critical(f"Failed to upload, skipping batch! See batch:\n")
+            self.logger.exception(e)
 
         self.logger.info(f"Encoded {dir_length} documents in {time.time() - starting_time} seconds")
         pbar.close()
@@ -204,9 +205,6 @@ class MacLoader:
             with open(file_path, "rb") as pdf_file:
                 pdf_reader = PyPDF2.PdfReader(pdf_file)
 
-                # Extract metadata
-                metadata = self.get_file_metadata(filename)
-
                 # Extract text from each page
                 for page_num in range(len(pdf_reader.pages)):
                     page = pdf_reader.pages[page_num]
@@ -214,9 +212,17 @@ class MacLoader:
 
                 if len(text) == 0:
                     self.logger.warning(f"PDF with filename {filename} did not detect any text. Deleting")
-                    with open(directory_path + "delete.json", "w") as file:
-                        json.dump(filename, file)
+                    with open("delete.txt", "a") as file:
+                        file.write(f"{filename}\n")
+                        file.close()
                     return {}
+                pdf_file.close()
+
+                # Extract metadata
+                metadata = self.get_file_metadata(filename)
+                metadata_size = str(metadata['size'])  # Has to be str or int for some reason, was not working
+                metadata_created_at = metadata['created_at']
+
                 text = self._clean_text(text)
 
                 # Cut down text from PDF into reasonable chunks
@@ -231,29 +237,24 @@ class MacLoader:
                         tmp = text[start_idx:]
                     else:
                         tmp = text[start_idx:end_idx]
-                    if self.chunked_vectors:
-                        chunked_text.append(tmp)
-
-                    vectors = None if self.chunked_vectors else encoder.encode(tmp, show_progress_bar=False).tolist()
 
                     chunks.append({
                         'id': str(self.doc_count),
                         'metadata': {
                             'filename': filename,
-                            'size': str(metadata['size']),  # Has to be str or int for some reason, was not working
-                            'created_at': metadata['created_at'],
-                            'text': tmp,
+                            'size': metadata_size,
+                            'created_at': metadata_created_at,
                             'chunk': count
-                        },
-                        'values': vectors
+                        }
                     })
+                    chunked_text.append(tmp)
                     self.doc_count = self.doc_count + 1
                     start_idx = end_idx - self.chunk_overlap
 
-                if self.chunked_vectors:
-                    vectorized_chunks = encoder.encode(chunked_text, show_progress_bar=False)
-                    for i, chunk in enumerate(chunks):
-                        chunk['values'] = vectorized_chunks[i].tolist()
+                vectorized_chunks = encoder.encode(chunked_text, show_progress_bar=False)
+                for i, chunk in enumerate(chunks):
+                    chunk['values'] = vectorized_chunks[i].tolist()
+                    chunk['metadata']['text'] = chunked_text[i]
 
                 return chunks
         except Exception as e:

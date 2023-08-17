@@ -3,14 +3,14 @@ import os
 import time
 
 from dotenv import load_dotenv, find_dotenv
-
-from databases.database import Database
 from pymilvus import (
     connections,
     utility,
     FieldSchema, CollectionSchema, DataType,
     Collection,
 )
+
+from databases.database import Database
 
 
 class MilvusDB(Database):
@@ -23,6 +23,7 @@ class MilvusDB(Database):
         password (str): Password of Milvus server
         ensure_exists (bool): Whether to create index if it does not exist
     """
+
     def __init__(self,
                  index_name: str = "pdf_flood",
                  url: str = None,
@@ -88,7 +89,7 @@ class MilvusDB(Database):
                 FieldSchema(
                     name="text",
                     dtype=DataType.VARCHAR,
-                    max_length=1100,
+                    max_length=5000,
                     description="Text of the document"
                 )
             ]
@@ -194,8 +195,7 @@ class MilvusDB(Database):
             text.append(doc['metadata']['text'])
             del doc['metadata']['text']
             doc['metadata']['document_id'] = doc['metadata']['filename']
-            doc['metadata']['chunk'] = doc['metadata']['chunk']
             metadata.append(doc['metadata'])
         self.logger.info("Milvus preprocessing complete")
-        return [ids, vectors, metadata, text]
 
+        return [ids, vectors, metadata, text]

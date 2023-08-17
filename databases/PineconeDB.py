@@ -19,6 +19,7 @@ class PineconeDB(Database):
         ensure_exists (bool): Whether to create index if it does not exist
         GRPC (bool): Whether to use GRPC for Pinecone server
     """
+
     def __init__(self,
                  index_name: str = "pdf-flood",
                  api_key: str = None,

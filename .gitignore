@@ -10,6 +10,7 @@ metadata.csv
 /logs
 bigdata.json
 index.py
+delete.txt
 
 
 # Byte-compiled / optimized / DLL files

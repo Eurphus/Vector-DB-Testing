@@ -11,6 +11,7 @@ class JSONDB(Database):
         filename (str): Name of JSON file
         homedirectory (str): Directory of JSON file
     """
+
     def __init__(self,
                  filename: str = "data",
                  home_directory: str = os.getcwd()
@@ -19,7 +20,7 @@ class JSONDB(Database):
         self.filename = filename
         self.home_directory = home_directory
 
-    def upload(self, batch: list) -> None:
+    async def upload(self, batch: list) -> None:
         """Method to dump list data into a JSON file
 
         :param batch: List of documents to dump
