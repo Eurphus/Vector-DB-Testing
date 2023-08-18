@@ -9,7 +9,6 @@ from pymilvus import (
     FieldSchema, CollectionSchema, DataType,
     Collection,
 )
-
 from databases.database import Database
 
 
@@ -145,9 +144,10 @@ class MilvusDB(Database):
         self.logger.info(f"Uploaded to Milvus in {time.time() - start_time}")
 
     def query(self, text: str, top_k: int = 5, include_metadata: bool = True,
-              include_vectors: bool = False):
+              include_vectors: bool = False, postprocess: bool = False):
         """Method to query Milvus database
 
+        :param postprocess: Whether to process the results or not
         :param text: Text to query with
         :param top_k: How many results to return
         :param include_metadata: Whether to include payload within the response to the search
@@ -177,7 +177,7 @@ class MilvusDB(Database):
             param=search_params,
             expr=None
         )
-        return results[0]
+        return self.postprocess(results[0]) if postprocess else results[0]
 
     def preprocess(self, batch):
         """Method to be used within the Milvus class in order to change the format of the batch to be uploaded
@@ -199,3 +199,22 @@ class MilvusDB(Database):
         self.logger.info("Milvus preprocessing complete")
 
         return [ids, vectors, metadata, text]
+
+    def postprocess(self, query, include_metadata: bool = True, include_text: bool = True):
+        """Method to change the format of the query results
+
+        :param include_text: Whether to include the text of the document in the results
+        :param include_metadata: Whether to include the metadata of the document in the results
+        :param query: Query results
+        :return:
+        """
+        results = []
+        for doc in query:
+            results.append({
+                'id': doc.id,
+                'score': doc.distance,
+                'metadata': doc.entity.metadata if include_metadata else None,
+                'text': doc.entity.text if include_text else None,
+            })
+        self.logger.info("Milvus postprocessing complete")
+        return results

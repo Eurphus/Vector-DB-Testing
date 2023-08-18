@@ -8,7 +8,6 @@ from qdrant_client.http.models import Distance
 
 from databases.database import Database
 
-
 class QDrantDB(Database):
     """ QDrant Database Class for interacting with a defined QDrant collection
     Args:
@@ -103,7 +102,7 @@ class QDrantDB(Database):
         logging.info(f"Uploaded to QDrant in {time.time() - start_time}")
 
     def query(self, text: str, top_k: int = 5, query_filter: any = None, include_metadata: bool = True,
-              include_vectors: bool = False):
+              include_vectors: bool = False, postprocess: bool = False):
         """Method to query QDrant database
 
         :param text: Text to query with
@@ -120,7 +119,7 @@ class QDrantDB(Database):
             with_payload=include_metadata,
             with_vectors=include_vectors
         )
-        return result
+        return self.postprocess(result, include_metadata=include_metadata) if postprocess else result
 
     def preprocess(self, batch):
         """Method to be used within the QDrantDB class in order to process data via the other format
@@ -165,3 +164,24 @@ class QDrantDB(Database):
                     memmap_threshold=20000
                 )
             )
+
+    def postprocess(self, query, include_metadata: bool = True, include_text: bool = True):
+        """Method to change the format of the query results
+
+        :param include_text: Whether to include the text of the document in the results
+        :param include_metadata: Whether to include the metadata of the document in the results
+        :param query: Query results
+        :return:
+        """
+        results = []
+        for doc in query:
+            txt = doc.payload['metadata']['text']
+            del doc.payload['metadata']['text']
+            results.append({
+                'id': doc.id,
+                'score': doc.score,
+                'metadata': doc.payload['metadata'] if include_metadata else None,
+                'text': txt if include_text else None,
+            })
+        self.logger.info("QDrant postprocessing complete")
+        return results

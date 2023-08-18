@@ -108,7 +108,7 @@ class PineconeDB(Database):
 
         self.logger.info(f"Uploaded to pinecone in {time.time() - start_time}")
 
-    def query(self, text: str, top_k: int = 5, include_values: bool = False, include_metadata: bool = True):
+    def query(self, text: str, top_k: int = 5, include_values: bool = False, include_metadata: bool = True, postprocess: bool = False):
         result = self.index.query(
             vector=self.encode(text),
             top_k=top_k,
@@ -116,4 +116,26 @@ class PineconeDB(Database):
             include_metadata=include_metadata,
             include_values=include_values
         )
-        return result
+        return self.postprocess(result) if postprocess else result
+
+    def postprocess(self, query, include_metadata: bool = True, include_text: bool = True):
+        """Method to change the format of the query results
+
+        :param include_text: Whether to include the text of the document in the results
+        :param include_metadata: Whether to include the metadata of the document in the results
+        :param query: Query results
+        :return:
+        """
+
+        results = []
+        for doc in query['matches']:
+            txt = doc['metadata']['text']
+            del doc['metadata']['text']
+            results.append({
+                'id': doc['id'],
+                'score': doc['score'],
+                'metadata': doc['metadata'] if include_metadata else None,
+                'text': txt if include_text else None,
+            })
+        self.logger.info("Pinecone postprocessing complete")
+        return results
