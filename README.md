@@ -1,3 +1,15 @@
+# How to use
+- Ensure appropriate packages are installed. Make sure the following are installed: sentence_transformers tqdm pandas PyPDF2 torch asyncio concurrent re qdrant_client pinecone pymilvus dotenv
+- Upload all PDF's into /data/, or other directory if specified.
+  - If you have a metadata file for more information regarding PDF files, upload it to the home directory and name it metadata.csv or change the name. Code likely will need to be changed in get_metadata() in MacLoader in order to accommodate your specific metadata file.
+- Input connection details in .env. See .env-EXAMPLE for what your .env should look like.
+  - This can be avoided if you just want to input the details as a part of the DB initialization in the code instead.
+- Create an index python file. From here I would define appropriate logging. With all the data it's important to look out for any issues. All logging is appropriately named using info, warning, error & critical.
+- Create delete.txt, do not put anything in it.
+- Import appropriate files from the project and initialize them with the appropriate details. All available params are well documented and should be shown by your IDE via hovering or clicking.
+  - Ex: `from Loader import MacLoader` & `from databases.PineconeDB import PineconeDB`
+- After doing a run of your files, check out delete.txt and see which files are giving issues with the PyPDF2 reader. If you want to remove these files, use Utility.delete_bad_pdfs()
+- Enjoy, let me know how to improve this process!
 
 # Key Takeaways
 ### Pre-processing
