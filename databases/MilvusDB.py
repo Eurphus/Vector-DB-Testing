@@ -57,6 +57,7 @@ class MilvusDB(Database):
             self.create()
             time.sleep(1)
 
+
         self.collection = Collection(name=self.index_name, using="default")
 
     def create(self) -> None:
@@ -111,8 +112,7 @@ class MilvusDB(Database):
                 field_name="embedding",
                 index_params={
                     "metric_type": "IP",
-                    "index_type": "HNSW",
-                    "params": {"nlist": 768}
+                    "index_type": "AUTOINDEX"
                 },
             )
             collection.load()
@@ -155,14 +155,6 @@ class MilvusDB(Database):
         :param include_vectors: Whether to include vectors within the response to the search
         :return:
         """
-        self.logger.info(f"Querying Milvus with {text}")
-
-        search_params = {
-            "metric_type": "IP",
-            "offset": 0,
-            "ignore_growing": False,
-            "params": {"nprobe": 10}
-        }
         output_fields = ["id"]
         if include_metadata:
             output_fields.append("metadata")
@@ -171,11 +163,11 @@ class MilvusDB(Database):
             output_fields.append("embedding")
 
         results = self.collection.search(
-            data=[text if pre_vectorized else self.encode(text), ],
+            data=[text if pre_vectorized else self.encode(text)],
             limit=top_k,
             output_fields=output_fields,
             anns_field="embedding",
-            param=search_params,
+            param={},
             expr=None
         )
         return self.postprocess(results[0]) if postprocess else results[0]
@@ -219,6 +211,3 @@ class MilvusDB(Database):
             })
         self.logger.info("Milvus postprocessing complete")
         return results
-
-    def change_index(self, type: str):
-        self.collection.drop_index(params={'index_name': "embedding"})
