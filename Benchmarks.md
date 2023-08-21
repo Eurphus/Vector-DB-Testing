@@ -35,7 +35,8 @@ Probably not comparable to real world performance
 From this one graph alone it is easy to distinguish QDrant has the absolute clear winner, especially as quality was the same across all tests.
 However, I would still say Milvus is still in the race.
 Pinecone is a goner for sure though. It likely does not have as good computing power on the free tier then the others, but it lagged behind really bad here.
-Looking at the tests, other than iteration time, QDrant is only slightly better than Milvus in all areas. I am removing Pinecone from this race, but I am going to assess how a better optimized Milvus will compete.
+Looking at the tests, other than iteration time, QDrant is only slightly better than Milvus in all areas. I am removing Pinecone from this race, ~~but I am going to assess how a better optimized Milvus will compete.~~
+Managed Milvus is auto optimized, and anything I did manually negatively impacted performance at this scale. Scaling up DB and testing.
 
 
 # Pre-processing Benchmarks 
