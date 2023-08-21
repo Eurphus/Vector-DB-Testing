@@ -14,6 +14,8 @@ All tests were done on the same machine with the same software and monitoring to
 ## 100 Iterations, basic questions
 [Git Commit]()
 
+*Note: Done on a work laptop NOT the machine mentioned above in specs
+
 
 Done with 1000 iterations, 4 random strings. 
 All strings were embedded before querying, embedding speed was therefore not a limiting factor.
