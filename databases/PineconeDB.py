@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from typing import Optional
 
 import pinecone
 from dotenv import load_dotenv, find_dotenv
@@ -108,9 +109,9 @@ class PineconeDB(Database):
 
         self.logger.info(f"Uploaded to pinecone in {time.time() - start_time}")
 
-    def query(self, text: str, top_k: int = 5, include_values: bool = False, include_metadata: bool = True, postprocess: bool = False):
+    def query(self, text: Optional[str], top_k: int = 5, include_values: bool = False, include_metadata: bool = True, postprocess: bool = False, pre_vectorized=False):
         result = self.index.query(
-            vector=self.encode(text),
+            vector=text if pre_vectorized else self.encode(text),
             top_k=top_k,
             namespace=self.default_namespace,
             include_metadata=include_metadata,
@@ -131,6 +132,7 @@ class PineconeDB(Database):
         for doc in query['matches']:
             txt = doc['metadata']['text']
             del doc['metadata']['text']
+            del doc['metadata']['created_at']
             results.append({
                 'id': doc['id'],
                 'score': doc['score'],

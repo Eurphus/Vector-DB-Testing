@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 from sentence_transformers import SentenceTransformer
 
@@ -15,7 +17,7 @@ class Database:
         self.encoder = SentenceTransformer(model_name_or_path=model_name, device=device)
         self.model_dimensions = self.encoder.get_sentence_embedding_dimension()
 
-    def query(self, text: str):
+    def query(self, text: Optional[str], postprocess=False, pre_vectorized=False):
         """Method to query the database for data
         """
         pass
@@ -33,4 +35,7 @@ class Database:
         return self.encoder.encode(text, show_progress_bar=False).tolist()
 
     def indexing(self, enable: bool) -> None:
+        pass
+
+    def postprocess(self, query, include_metadata: bool = True, include_text: bool = True):
         pass

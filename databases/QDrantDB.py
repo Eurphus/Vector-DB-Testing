@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from typing import Optional
 
 from dotenv import load_dotenv, find_dotenv
 from qdrant_client import QdrantClient, models
@@ -36,7 +37,8 @@ class QDrantDB(Database):
 
         self.client = QdrantClient(
             api_key=api_key,
-            url=url
+            url=url,
+            prefer_grpc=True
         )
         if ensure_exists:
             self.create()
@@ -101,8 +103,8 @@ class QDrantDB(Database):
 
         logging.info(f"Uploaded to QDrant in {time.time() - start_time}")
 
-    def query(self, text: str, top_k: int = 5, query_filter: any = None, include_metadata: bool = True,
-              include_vectors: bool = False, postprocess: bool = False):
+    def query(self, text: Optional[str], top_k: int = 5, query_filter: any = None, include_metadata: bool = True,
+              include_vectors: bool = False, postprocess: bool = False, pre_vectorized=False):
         """Method to query QDrant database
 
         :param text: Text to query with
@@ -114,7 +116,7 @@ class QDrantDB(Database):
         """
         result = self.client.search(
             collection_name=self.index_name,
-            query_vector=self.encode(text),
+            query_vector=text if pre_vectorized else self.encode(text),
             limit=top_k,
             with_payload=include_metadata,
             with_vectors=include_vectors
@@ -177,6 +179,7 @@ class QDrantDB(Database):
         for doc in query:
             txt = doc.payload['metadata']['text']
             del doc.payload['metadata']['text']
+            del doc.payload['metadata']['created_at']
             results.append({
                 'id': doc.id,
                 'score': doc.score,

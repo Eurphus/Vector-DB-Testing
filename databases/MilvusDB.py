@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from typing import Optional
 
 from dotenv import load_dotenv, find_dotenv
 from pymilvus import (
@@ -143,8 +144,8 @@ class MilvusDB(Database):
 
         self.logger.info(f"Uploaded to Milvus in {time.time() - start_time}")
 
-    def query(self, text: str, top_k: int = 5, include_metadata: bool = True,
-              include_vectors: bool = False, postprocess: bool = False):
+    def query(self, text: Optional[str], top_k: int = 5, include_metadata: bool = True,
+              include_vectors: bool = False, postprocess: bool = False, pre_vectorized: bool = False):
         """Method to query Milvus database
 
         :param postprocess: Whether to process the results or not
@@ -170,7 +171,7 @@ class MilvusDB(Database):
             output_fields.append("embedding")
 
         results = self.collection.search(
-            data=[self.encode(text)],
+            data=[text if pre_vectorized else self.encode(text), ],
             limit=top_k,
             output_fields=output_fields,
             anns_field="embedding",
@@ -194,7 +195,7 @@ class MilvusDB(Database):
             vectors.append(doc['values'])
             text.append(doc['metadata']['text'])
             del doc['metadata']['text']
-            doc['metadata']['document_id'] = doc['metadata']['filename']
+            del doc['metadata']['created_at']
             metadata.append(doc['metadata'])
         self.logger.info("Milvus preprocessing complete")
 
@@ -218,3 +219,6 @@ class MilvusDB(Database):
             })
         self.logger.info("Milvus postprocessing complete")
         return results
+
+    def change_index(self, type: str):
+        self.collection.drop_index(params={'index_name': "embedding"})

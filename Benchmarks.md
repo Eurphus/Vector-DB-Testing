@@ -8,6 +8,37 @@ Thermal throttling did not happen in any of these benchmarks. Temperatures were 
 
 All tests were done on the same machine with the same software and monitoring tools.
 
+
+# Querying Speed & Quality Benchmarks
+
+## 100 Iterations, basic questions
+[Git Commit]()
+
+
+Done with 1000 iterations, 4 random strings. 
+All strings were embedded before querying, embedding speed was therefore not a limiting factor.
+Quality is not comparable in this test, all items returned the EXACT same items.
+Probably not comparable to real world performance
+
+
+| Database                         | QDrant  | Milvus  | Pinecone |
+|----------------------------------|---------|---------|----------|
+| Average Quality Time             | 0.0818  | 0.127   | 0.207    |
+| Average Iterations Time          | 0.0360  | 0.0773  | 0.0903   |
+| Average Multi-threaded Time Sim  | 0.0792  | 0.0842  | 0.241    |
+| Average Multi-threaded Time Real | 0.00398 | 0.00422 | 0.0121   |
+| Total Quality Time               | 0.327   | 0.506   | 0.828    |
+| Total Iterations Time            | 144.    | 309.    | 361.     |
+| Time Multi-threaded Time         | 15.9    | 16.9    | 48.4     |
+| Total All Time                   | 160     | 326     | 410      |
+
+From this one graph alone it is easy to distinguish QDrant has the absolute clear winner, especially as quality was the same across all tests.
+However, I would still say Milvus is still in the race.
+Pinecone is a goner for sure though. It likely does not have as good computing power on the free tier then the others, but it lagged behind really bad here.
+Looking at the tests, other than iteration time, QDrant is only slightly better than Milvus in all areas. I am removing Pinecone from this race, but I am going to assess how a better optimized Milvus will compete.
+
+
+# Pre-processing Benchmarks 
 ## Pre-processing Benchmark V3
 [Code Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/678bf7b28bd9ad0ebdae15ae3ada29743209b894)
 

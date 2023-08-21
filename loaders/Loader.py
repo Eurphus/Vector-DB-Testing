@@ -13,7 +13,6 @@ import torch
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-
 class MacLoader:
     """Multithreading directory file loading & encoding
 
@@ -105,13 +104,6 @@ class MacLoader:
                      Using batches of {self.max_chunk_size} with a max of {max_num_files} files
                      Model Name={self.model_name}, data directory={self.data_directory}, max chunk size={self.max_chunk_size}, overlap={self.chunk_overlap}""")
         starting_time = time.time()
-        if type(database) == str:
-            if database == 'JSON':
-                from databases.JSONDB import JSONDB
-                database = JSONDB()
-            elif database == "Pinecone":
-                from databases.PineconeDB import PineconeDB
-                database = PineconeDB()
 
         # Faster uploading for applicable databases
         database.indexing(False)
