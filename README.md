@@ -1,3 +1,5 @@
+[See benchmarks](https://github.com/Eurphus/Vector-DB-Testing/blob/master/Benchmarks.md)
+
 # How to use
 - Ensure appropriate packages are installed. Make sure the following are installed: sentence_transformers tqdm pandas PyPDF2 torch asyncio concurrent re qdrant_client pinecone pymilvus dotenv
 - Upload all PDF's into /data/, or other directory if specified.
