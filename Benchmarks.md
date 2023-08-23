@@ -12,12 +12,12 @@ All tests were done on the same machine with the same software and monitoring to
 # Querying Speed & Quality Benchmarks
 
 ## 100 Iterations, basic questions
-[Git Commit]()
+[Git Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/f41518c33d886a8c077d44f8ebb348bb0f90714f)
 
 *Note: Done on a work laptop NOT the machine mentioned above in specs
 
 
-Done with 1000 iterations, 4 random strings. 
+Done with 1000 iterations, 4 random strings. With 365mb pdf base as mentioned before
 All strings were embedded before querying, embedding speed was therefore not a limiting factor.
 Quality is not comparable in this test, all items returned the EXACT same items.
 Probably not comparable to real world performance
@@ -42,9 +42,38 @@ Managed Milvus is auto optimized, and anything I did manually negatively impacte
 
 
 # Pre-processing Benchmarks 
+
+### Pre-processing info
+
+After attempting to upload 3GB+ pdf base with 300 batch size, 1 worker.
+- The databases were being hammered the entire time, but every single database had NO FAILURES. 
+- Each DB managed the load fine, with some understandable uploading spike times. 
+  - Pinecone was the most spikey, with times normally ranging from 1.2 - 1.6s with occasional spikes of 2s-3s
+  - QDrant was consistently the best with batch times being 0.8 - 1.4. Max spikes of 1.9 which were rare
+  - Milvus was consistently the slowest with batch times beings 1.4 - 1.7 with occasional spikes of 2-2.8s during heavy load
+    - I did not disable indexing, which may explain this.
+
+I stopped the program at 46% (732 PDFs) due to Pinecone filling up first. Milvus and QDrant still have plenty of space with their starter tiers.
+178800 reported vectors
+
+## Pre-processing Benchmark V4
+[Git Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/f41518c33d886a8c077d44f8ebb348bb0f90714f)
+This test is because I forgot my previous numbers, but wanted an estimate for how long uploading will take.
+Done with multithreading, 1 concurrent workers, gpu, and a batch size of 200.
+Uploading would go faster, but pinecone will not safely take a larger size.
+With 75 files worth 178MB
+|                             | Milvus | QDrant | Pinecone |
+|-----------------------------|--------|--------|----------|
+| Time to upload batch of 200 | ~1.1s  | ~0.6   | ~0.9s    |
+| Time to upload all          | 101s   | 106.6  | 105.7s   |
+
+Between the different databases this isn't a significant difference. However, Pinecone is a limiting factor due to the requirement of a lower batch size.
+Upload time should not be a factor while comparing these DB's, all final times are within range of error.
+Also, strange that average time to upload batches of 200 was 0.6 for QDrant, but Milvus was almost two times slower and still completed in less time.
+
 ## Pre-processing Benchmark V3
 [Code Commit](https://github.com/Eurphus/Vector-DB-Testing/tree/678bf7b28bd9ad0ebdae15ae3ada29743209b894)
-
+a
 Loading 50 various PDF files with different formats and lengths of text to PINECONE database
 
 
@@ -62,6 +91,7 @@ Loading 50 various PDF files with different formats and lengths of text to PINEC
 | 32                 | 390 | 46  |
 
 100 files, 200 batch size
+
 |  Workers | GPU |
 |----------|-----|
 | 1        | 56  |
@@ -70,6 +100,7 @@ Loading 50 various PDF files with different formats and lengths of text to PINEC
 | 12       | 73  |
 
 100 files
+
 | Batch Size | 1 GPU Worker | 2 GPU Worker |
 |------------|--------------|--------------|
 | 400        | 56           | 60           |
