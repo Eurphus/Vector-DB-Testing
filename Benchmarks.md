@@ -11,9 +11,6 @@ All tests were done on the same machine with the same software and monitoring to
 
 # Querying Speed & Quality Benchmarks
 
-Tragically, my free trial of Milvus has ended and I no longer have access. Due to this I am only comparing against old numbers, you will see duplicates in speeds in this.
-The gap between Milvus and QDrant may be due to the difference in hardware. 
-
 The Milvus instance has 1 CU, which I don't know is comparable to a vCore. 
 
 QDrant had 0.5 vCore, max 1 gb
