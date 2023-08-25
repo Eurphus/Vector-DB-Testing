@@ -12,11 +12,16 @@ All tests were done on the same machine with the same software and monitoring to
 # Querying Speed & Quality Benchmarks
 
 Tragically, my free trial of Milvus has ended and I no longer have access. Due to this I am only comparing against old numbers, you will see duplicates in speeds in this.
-The gap between Milvus and QDrant may be due to the difference in hardware. The 
-Milvus instance has 1 CU, which I don't know is comparable to a vCore. 
+The gap between Milvus and QDrant may be due to the difference in hardware. 
+
+The Milvus instance has 1 CU, which I don't know is comparable to a vCore. 
+
 QDrant had 0.5 vCore, max 1 gb
 
-Ultimately, Milvus hardware was billed at $65/month for a trial. QDrant is on a starter instance that is forever free. The two WILL have differences in speed. 
+Ultimately, Milvus hardware was billed at $65/month for a trial. 
+
+QDrant is on a starter instance that is forever free. The two WILL have differences in speed. 
+
 Same goes for Pinecone, but at lower vector counts it still was much slower than the other two. I am saying this for QDrant and Milvus because in lower vector count benchmarks, QDrant outperformed Milvus slightly and only in multithreading high query tests.
 
 
