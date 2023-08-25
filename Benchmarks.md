@@ -22,6 +22,11 @@ QDrant is on a starter instance that is forever free. The two WILL have differen
 Same goes for Pinecone, but at lower vector counts it still was much slower than the other two. I am saying this for QDrant and Milvus because in lower vector count benchmarks, QDrant outperformed Milvus slightly and only in multithreading high query tests.
 
 
+[Testing Method](https://github.com/Eurphus/Vector-DB-Testing/blob/master/Utility.py)
+
+It was a very simple method for testing these stats, and is not representative of real world performance. 
+
+Something notable is that Multi-threaded sim is the average time it takes for a individual thread to process a query. Real is the time it took for the query process to finish. Does not take any single query into consideration, just how quickly all of them finish.
 
 ### 50000 Iterations, 8 prompts, 100 workers, 178800 vectors
 
