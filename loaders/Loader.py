@@ -20,7 +20,7 @@ class MacLoader:
         device (str): Selected device to encode. If not specified it will pick CUDA if available, cpu if not.
         model_name (str): Sentence Transformer model to use.
         max_workers_num (int): Max amount of workers/threads to run at the same time. If not specified it will default to amount of threads your CPU supports.
-        max_chunk_size (int): Max amount of characters per every chunk of data. Higher for greater context, lower for greater context.
+        max_chunk_size (int): Max amount of characters per every chunk of data. Higher for greater context, lower for less context but more specific data. If descreased, make sure k search param is increased.
         chunk_overlap (int): Amount of overlap between chunks.
         data_directory (str): Directory where all data is found.
         JSONFilename (str): Name of file to write JSON data to if applicable.
